@@ -1,16 +1,15 @@
 package core
 
 import (
-	"bufio"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"os/signal"
 	"path/filepath"
-	"runtime/debug"
 	"syscall"
 
+	"codeberg.org/wlcsm/li/ansi"
 	"github.com/mattn/go-runewidth"
 	"github.com/pkg/errors"
 	"golang.org/x/term"
@@ -22,7 +21,7 @@ var (
 )
 
 var (
-	LogFile = "/var/log/li.log"
+	LogFile = filepath.Join(os.Getenv("HOME"), ".li.log")
 )
 
 // E is the editor kernel
@@ -52,7 +51,6 @@ var (
 // * File IO
 type E struct {
 	signals chan os.Signal
-	keys    chan Key
 	Errs    chan error
 
 	// cursor coordinates
@@ -89,6 +87,8 @@ type E struct {
 
 	colorscheme map[SyntaxHL]int
 
+	keymap func(*E, ansi.Key) error
+
 	// Callbacks.
 	// Currently only has the open file callback
 	callbacks Callbacks
@@ -116,56 +116,80 @@ type Row struct {
 
 type EditorConf struct {
 	Config    DisplayConfig
+	Keymap    func(*E, ansi.Key) error
 	Callbacks Callbacks
 }
 
-func NewEditor(conf EditorConf) (E, error) {
-	teardown, err := enableLogs()
-	if err != nil {
-		panic(err)
-	}
-	defer teardown()
-
+func NewEditor(conf EditorConf, args []string) (err error) {
 	defer func() {
-		SwitchBackFromAlternateScreen(os.Stdout)
-
-		os.Stdout.WriteString(ClearScreenCode)
-		os.Stdout.WriteString(RepositionCursorCode)
-		if err := recover(); err != nil {
-			fmt.Fprintf(os.Stderr, "error: %+v\n", err)
-			fmt.Fprintf(os.Stderr, "stack: %s\n", debug.Stack())
-			os.Exit(1)
+		if e := recover(); e != nil {
+			err = errors.Wrap(e.(error), "panic")
 		}
 	}()
 
-	// Set the terminal to raw mode
+	logFile, err := os.OpenFile(LogFile, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o666)
+	if err != nil {
+		return errors.Wrap(err, "opening log file: "+LogFile)
+	}
+	defer logFile.Close()
+
+	log.SetOutput(logFile)
+	log.Println("Begin logging")
+
+	SwitchToAlternateScreen(os.Stdout)
+	defer SwitchBackFromAlternateScreen(os.Stdout)
+
+	// Set the terminal to raw mode. This allows us to directly receive the
+	// user's raw input without further processing by the terminal
 	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
 	if err != nil {
 		panic(err)
 	}
-
-	// Restore the old terminal settings when we finish
 	defer term.Restore(int(os.Stdin.Fd()), oldState)
 
 	e := E{}
 	e.setWindowSize()
 	e.cfg = conf.Config
+	e.keymap = conf.Keymap
 
-	e.keys = make(chan Key)
-	go Parsekeys(os.Stdin, e.keys, e.Errs)
+	if len(args) > 1 {
+		err := e.OpenFile(args[1])
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	} else {
+		e.rows = []*Row{{}}
+	}
+
+	e.FullRender()
 
 	e.signals = make(chan os.Signal)
 	signal.Notify(e.signals, syscall.SIGWINCH)
 
 	go func() {
-		for err := range e.Errs {
-			e.SetStatusLine("err: " + err.Error())
+		d := ansi.NewDecoder(os.Stdin)
+		for {
+			key, err := d.Decode()
+			if err != nil {
+				e.Errs <- err
+			}
+
+			if err := e.keymap(&e, key); err != nil {
+				e.Errs <- err
+			}
 		}
 	}()
 
-	e.FullRender()
-
-	return e, nil
+	e.Errs = make(chan error)
+	for {
+		select {
+		case err := <-e.Errs:
+			if err == ErrQuitEditor {
+				return nil
+			}
+			e.SetStatusLine("err: " + err.Error())
+		}
+	}
 }
 
 func (e *E) SetStatusLine(format string, a ...interface{}) {
@@ -185,53 +209,6 @@ func (e *E) detectSyntax() {
 	}
 }
 
-func Parsekeys(r io.Reader, keys chan<- Key, errs chan<- error) {
-	reader := bufio.NewReaderSize(r, 16)
-	buf := make([]rune, 0, 4)
-	for {
-		// TODO abstract this
-		r, _, err := reader.ReadRune()
-		if err != nil && err != io.EOF {
-			errs <- err
-			continue
-		}
-
-		if r == '\x1b' {
-			buf = append(buf, r)
-			continue
-		}
-
-		if len(buf) == 0 {
-			keys <- Key(r)
-			continue
-		}
-
-		// I'm pretty sure there aren't any escape sequences
-		// with more than 4 runes
-		if len(buf) == 4 {
-			for _, d := range buf {
-				keys <- Key(d)
-			}
-
-			keys <- Key(r)
-			buf = buf[:0]
-			continue
-		}
-
-		buf = append(buf, r)
-
-		key, ok := escapeCodeToKey[string(buf)]
-		if ok {
-			keys <- key
-			buf = buf[:0]
-		}
-	}
-}
-
-func (e *E) Keys() <-chan Key {
-	return e.keys
-}
-
 func (e *E) Signals() <-chan os.Signal {
 	return e.signals
 }
@@ -247,19 +224,6 @@ func (e *E) setWindowSize() error {
 	e.screenCols = cols
 
 	return nil
-}
-
-// Enables logging and returns teardown function
-func enableLogs() (func() error, error) {
-	f, err := os.OpenFile(LogFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0o666)
-	if err != nil {
-		return nil, errors.Wrap(err, "open: "+LogFile)
-	}
-
-	log.SetOutput(f)
-	log.Println("Begin logging")
-
-	return f.Close, nil
 }
 
 func (e *E) drawStatusBar(w io.Writer) {
@@ -297,4 +261,16 @@ func (e *E) drawStatusBar(w io.Writer) {
 	w.Write([]byte(rmsg))
 	w.Write([]byte("\r\n"))
 	w.Write(ClearFormatting)
+}
+
+func (e *E) ScreenRows() int {
+	return e.screenRows
+}
+
+func (e *E) ScreenCols() int {
+	return e.screenCols
+}
+
+func (e *E) ScreenCenter() int {
+	return e.rowOffset + (e.screenRows / 2)
 }

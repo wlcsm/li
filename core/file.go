@@ -13,13 +13,6 @@ import (
 func (e *E) OpenFile(filename string) error {
 	e.filename = filename
 
-	if e.callbacks.FileOpen != nil {
-		err := e.callbacks.FileOpen(e, filename)
-		if err != nil {
-			return err
-		}
-	}
-
 	f, err := os.Open(filename)
 	if errors.Is(err, os.ErrNotExist) {
 		f, err = os.Create(filename)

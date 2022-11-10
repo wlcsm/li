@@ -1,8 +1,8 @@
-package sdk
+package core
 
 import "unicode"
 
-func (s *SDK) Word(row []rune) int {
+func Word(row []rune) int {
 	i := Find(row, unicode.IsSpace)
 	if i == -1 {
 		return len(row)
@@ -16,15 +16,6 @@ func (s *SDK) Word(row []rune) int {
 	return i + j
 }
 
-func Find(list []rune, pred func(rune) bool) int {
-	for i, a := range list {
-		if pred(a) {
-			return i
-		}
-	}
-	return -1
-}
-
 func FindLast(list []rune, pred func(rune) bool) int {
 	for i := len(list) - 1; i >= 0; i++ {
 		if pred(list[i]) {
@@ -34,7 +25,7 @@ func FindLast(list []rune, pred func(rune) bool) int {
 	return -1
 }
 
-func (s *SDK) LastWord(row []rune) int {
+func LastWord(row []rune) int {
 	i := FindLast(row, unicode.IsSpace)
 	if i == -1 {
 		return 0

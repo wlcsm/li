@@ -5,14 +5,13 @@ import "codeberg.org/wlcsm/li/core"
 var Colorscheme = map[core.SyntaxHL]int{
 	core.HLComment:   90,
 	core.HLMlComment: 90,
-	core.HLKeyword1:  94,
-	core.HLKeyword2:  96,
+	core.HLKeyword1:       94,
+	core.HLKeyword2:       96,
 	core.HLString:    36,
 	core.HLNumber:    33,
 	core.HLMatch:     32,
 	core.HLNormal:    39,
 }
-
 
 func SyntaxConf(ext string) *core.EditorSyntax {
 	switch ext {

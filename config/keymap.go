@@ -3,8 +3,9 @@ package config
 import (
 	"log"
 
-	"github.com/pkg/errors"
+	"codeberg.org/wlcsm/li/ansi"
 	"codeberg.org/wlcsm/li/core"
+	"github.com/pkg/errors"
 )
 
 type EditorMode int8
@@ -17,25 +18,18 @@ const (
 
 // ProcessKey processes a key read from stdin.
 // Returns errQuitEditor when user requests to quit.
-func ProcessKey(e *core.E, k core.Key) (err error) {
+func ProcessKey(e *core.E, k ansi.Key) (err error) {
 	defer func() {
 		if e := recover(); e != nil {
 			err = errors.Wrap(e.(error), "panicked")
 		}
 	}()
 
+	log.Printf("processing key: %s", string(k))
 
-	for _, keymap := range e.keymapping {
-		log.Printf("processing key: %s, with keymap: %s", string(k), keymap.Name)
-
-		handled, err := keymap.Handler(e, k)
-		if err != nil {
-			return err
-		}
-
-		if handled {
-			return nil
-		}
+	_, err = basicHandler(e, k)
+	if err != nil {
+		return err
 	}
 
 	return nil

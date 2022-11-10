@@ -3,19 +3,20 @@ package config
 import (
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
 
+	"codeberg.org/wlcsm/li/ansi"
 	"codeberg.org/wlcsm/li/core"
-	"codeberg.org/wlcsm/li/sdk"
 )
 
 type KeyMapName string
 
 type KeyMap struct {
 	Name    KeyMapName
-	Handler func(e *core.E, k core.Key) (bool, error)
+	Handler func(e *core.E, k ansi.Key) (bool, error)
 }
 
 const (
@@ -50,19 +51,19 @@ func init() {
 	}
 }
 
-func basicHandler(e *core.E, k core.Key) (bool, error) {
+func basicHandler(e *core.E, k ansi.Key) (bool, error) {
 	switch k {
-	case core.UpArrowKey:
+	case ansi.UpArrowKey:
 		e.SetY(e.Y() - 1)
-	case core.DownArrowKey:
+	case ansi.DownArrowKey:
 		e.SetY(e.Y() + 1)
-	case core.LeftArrowKey:
+	case ansi.LeftArrowKey:
 		e.SetX(e.X() - 1)
-	case core.RightArrowKey:
+	case ansi.RightArrowKey:
 		e.SetX(e.X() + 1)
-	case core.Ctrl('q'):
+	case ansi.Ctrl('q'):
 		return true, core.ErrQuitEditor
-	case core.Ctrl('s'):
+	case ansi.Ctrl('s'):
 		log.Printf("attempting to save: %s\n", e.Filename())
 		if err := e.Save(); err != nil {
 			return true, err
@@ -70,59 +71,69 @@ func basicHandler(e *core.E, k core.Key) (bool, error) {
 
 		e.SetStatusLine("saved file: %s", e.Filename())
 
-	case core.Ctrl('w'):
-		e.SetRow(e.Y(), append(e.rows[e.Y()].chars[:e.BackWord()], e.rows[e.Y()].chars[e.X()-1:]...))
-	case core.Ctrl('u'):
+		//	case ansi.Ctrl('w'):
+		//		e.SetRow(e.Y(), append(e.rows[e.Y()].chars[:e.BackWord()], e.rows[e.Y()].chars[e.X()-1:]...))
+	case ansi.Ctrl('u'):
 		e.SetY(e.Y() - (e.ScreenRows() / 2))
-		e.CenterCursor()
-	case core.Ctrl('d'):
-		e.SetY(e.Y() + (e.screenRows / 2))
-		e.CenterCursor()
+	case ansi.Ctrl('d'):
+		e.SetY(e.Y() + (e.ScreenRows() / 2))
+	case ansi.DeleteKey, ansi.BackspaceKey:
+		if row := e.Row(e.Y()); len(row) != 0 {
+			e.SetRow(e.Y(), row[:len(row)-1])
+			e.SetX(e.X() - 1)
+		}
 	default:
+		log.Println("insert char: ", rune(k))
+		e.AppendChar(e.Y(), rune(k))
+		e.SetX(e.X() + 1)
 		return false, nil
 	}
 
 	return true, nil
 }
 
-func insertModeHandler(e *E, k core.Key) (bool, error) {
+func insertModeHandler(e *core.E, k ansi.Key) (bool, error) {
 	switch k {
-	case core.EnterKey:
+	case ansi.EnterKey:
 		row := e.Row(e.Y())
-		row, row2 := row[:e.X()], row[e.X():]
+		//row, row2 := row[:e.X()], row[e.X():]
 
 		e.SetRow(e.Y(), row)
-		e.InsertRow(e.Y()+1, row2)
+		panic("unimplemented")
+		//e.InsertRow(e.Y()+1, row2)
 
 		e.SetY(e.Y() + 1)
 		e.SetX(0)
 
-	case core.CarriageReturnKey:
+	case ansi.CarriageReturnKey:
 		row := e.Row(e.Y())
-		row, row2 := row[:e.X()], row[e.X():]
+		//row, row2 := row[:e.X()], row[e.X():]
 
 		e.SetRow(e.Y(), row)
-		e.InsertRow(e.Y()+1, row2)
+		panic("unimplemented")
+		//e.InsertRow(e.Y()+1, row2)
 
 		e.SetY(e.Y() + 1)
 		e.SetX(0)
 
-	case core.DeleteKey, core.BackspaceKey:
-		x, y := e.X(), e.Y()
-		if x != 0 {
-			e.SetRow(y, append(e.rows[y].chars[:x-1], e.rows[y].chars[x:]...))
-			e.SetX(x - 1)
-		} else {
-			e.SetY(y - 1)
-			e.SetX(len(e.Row(y - 1)))
-
-			e.SetRow(y-1, append(e.Row(y-1), e.Row(y)...))
-			e.DeleteRows(y, y)
-		}
+	case ansi.DeleteKey, ansi.BackspaceKey:
+		panic("unimplemented")
+		//		x, y := e.X(), e.Y()
+		//		if x != 0 {
+		//			e.SetRow(y, append(e.rows[y].chars[:x-1], e.rows[y].chars[x:]...))
+		//			e.SetX(x - 1)
+		//		} else {
+		//			e.SetY(y - 1)
+		//			e.SetX(len(e.Row(y - 1)))
+		//
+		//			e.SetRow(y-1, append(e.Row(y-1), e.Row(y)...))
+		//			e.DeleteRows(y, y)
+		//		}
 
 	default:
-		if k == core.Key('\t') || core.IsPrintable(k) {
-			e.InsertChars(e.Y(), e.X(), rune(k))
+		panic("unimplemented")
+		if k == ansi.Key('\t') || core.IsPrintable(k) {
+			//e.InsertChars(e.Y(), e.X(), rune(k))
 			e.SetX(e.X() + 1)
 		}
 	}
@@ -134,60 +145,36 @@ const (
 	StartSelection = "start"
 )
 
-func commandModeHandler(e *core.E, k core.Key) (bool, error) {
+func commandModeHandler(e *core.E, k ansi.Key) (bool, error) {
 	switch k {
-	case core.Key('j'):
+	case ansi.Key('j'):
 		e.SetY(e.Y() + 1)
-	case core.Key('k'):
+	case ansi.Key('k'):
 		e.SetY(e.Y() - 1)
-	case core.Key('h'):
+	case ansi.Key('h'):
 		e.SetX(e.X() - 1)
-	case core.Key('l'):
+	case ansi.Key('l'):
 		e.SetX(e.X() + 1)
-	case core.Key('J'):
+	case ansi.Key('J'):
 		e.SetY(e.NumRows() - 1)
-	case core.Key('K'):
+	case ansi.Key('K'):
 		e.SetY(0)
-	case core.Key('H'), core.Key('0'):
+	case ansi.Key('H'), ansi.Key('0'):
 		e.SetX(0)
-	case core.Key('G'):
+	case ansi.Key('G'):
 		e.SetY(e.NumRows())
-	case core.Key('C'):
+	case ansi.Key('C'):
 		e.SetRow(e.Y(), []rune{})
-	case core.Key('e'):
-		e.StaticPrompt("File name: ", func(f string) error {
+	case ansi.Key('e'):
+		StaticPrompt(e, "File name: ", func(f string) error {
 			if len(f) == 0 {
 				return fmt.Errorf("No file name")
 			}
 
 			return e.OpenFile(f)
-		}, sdk.FileCompletion)
-	case core.Key('n'):
-		if len(e.LastSearch()) == 0 {
-			e.SetStatusLine("There is no last search")
-			break
-		}
-
-		x, y := e.goForwardOneStep()
-		x, y = e.Find(x, y, e.LastSearch())
-		if x != -1 {
-			e.SetY(y)
-			e.SetX(x)
-		}
-	case core.Key('N'):
-		if len(e.LastSearch()) == 0 {
-			e.SetStatusLine("There is no last search")
-			break
-		}
-
-		x, y := e.goBackOneStep()
-		x, y = e.FindBack(x, y, e.LastSearch())
-		if x != -1 {
-			e.SetY(y)
-			e.SetX(x)
-		}
-	case core.Key('s'):
-		e.StaticPrompt("$ ", func(res string) error {
+		}, FileCompletion)
+	case ansi.Key('s'):
+		StaticPrompt(e, "$ ", func(res string) error {
 			if len(res) == 0 {
 				return nil
 			}
@@ -308,28 +295,28 @@ func FileCompletion(a string) ([]CmplItem, error) {
 
 // StaticPrompt is a "normal" prompt designed to only get input from the user.
 // It you want things to happen when you press any key, then use Prompt
-func (e *E) StaticPrompt(prompt string, end func(string) error, comp ...CompletionFunc) {
+func StaticPrompt(e *core.E, prompt string, end func(string) error, comp ...CompletionFunc) {
 	var input string
 	var cachedComp []CmplItem
 	var compIndex int
 
-	s.Prompt(prompt, func(k core.Key) string {
+	e.Prompt(prompt, func(k ansi.Key) string {
 		log.Printf("key is: %s", string(k))
 
 		switch k {
-		case core.EnterKey, core.CarriageReturnKey:
+		case ansi.EnterKey, ansi.CarriageReturnKey:
 			if err := end(input); err != nil {
-				s.e.Errs <- err
+				e.Errs <- err
 			}
 
 			return input
-		case core.EscapeKey, core.Key(core.Ctrl('q')):
+		case ansi.EscapeKey, ansi.Ctrl('q'):
 			return ""
-		case core.BackspaceKey, core.DeleteKey:
+		case ansi.BackspaceKey, ansi.DeleteKey:
 			if len(input) > 0 {
 				input = input[:len(input)-1]
 			}
-		case core.Key('\t'):
+		case ansi.Key('\t'):
 			if len(comp) == 0 {
 				break
 			}
@@ -355,13 +342,13 @@ func (e *E) StaticPrompt(prompt string, end func(string) error, comp ...Completi
 			input = cachedComp[compIndex].Real
 
 		default:
-			if isPrintable(k) {
+			if core.IsPrintable(k) {
 				input += string(k)
 				cachedComp = nil
 				compIndex = 0
 			}
 		}
 
-		return input, false
+		return input
 	})
 }

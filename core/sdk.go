@@ -12,6 +12,13 @@ func (e *E) Row(y int) []rune {
 func (e *E) SetRow(y int, r []rune) {
 	e.rows[y].chars = r
 	e.updateRow(y)
+	e.Render(y)
+}
+
+func (e *E) AppendChar(y int, c rune) {
+	e.rows[y].chars = append(e.rows[y].chars, c)
+	e.updateRow(y)
+	e.Render(y)
 }
 
 func (e *E) NumRows() int {
@@ -45,7 +52,7 @@ func (e *E) SaveTo(filename string) error {
 	defer f.Close()
 
 	for _, row := range e.rows {
-		if _, err := f.Write([]byte(string(row.chars))); err != nil {
+		if _, err := f.Write([]byte(string(append(row.chars,rune('\n'))))); err != nil {
 			return err
 		}
 		if _, err := f.Write([]byte{'\n'}); err != nil {

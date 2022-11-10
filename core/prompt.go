@@ -1,24 +1,25 @@
-package sdk
+package core
 
-import "codeberg.org/wlcsm/li/core"
+import "codeberg.org/wlcsm/li/ansi"
 
 // Prompt shows the given prompt in the status bar and get user input
-func (s *SDK) Prompt(prompt string, keymap func(k core.Key) string) {
+func (e *E) Prompt(prompt string, keymap func(k ansi.Key) string) {
 	if keymap == nil {
 		panic("can't give a nil function to prompt")
 	}
 
-	s.e.SetStatusLine(prompt)
+	e.SetStatusLine(prompt)
 
-	s.SetBackupKeymap()
-	s.SetKeymap(func(e *core.E, k core.Key) error {
-		if k == core.EnterKey {
-			s.RestoreBackup()
-			return nil
-		}
-
-		s := keymap(k)
-		e.SetStatusLine(prompt + s)
-		return nil
-	})
+	panic("not implemented")
+	//	e.SetBackupKeymap()
+	//	e.SetKeymap(func(e *E, k Key) error {
+	//		if k == EnterKey {
+	//			e.RestoreBackup()
+	//			return nil
+	//		}
+	//
+	//		s := keymap(k)
+	//		e.SetStatusLine(prompt + s)
+	//		return nil
+	//	})
 }
