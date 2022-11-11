@@ -50,14 +50,27 @@ var (
 // * Input processing
 // * File IO
 type E struct {
+	// specify which syntax highlight to use.
+	syntax *EditorSyntax
+
+	filetypeLookup func(string) *EditorSyntax
+
 	signals chan os.Signal
+	keymap func(*E, ansi.Key) error
+	colorscheme map[SyntaxHL]int
 	Errs    chan error
+
+	filename string
+
+	// status message and time the message was set
+	statusMsg string
+
+	// file content
+	rows []*Row
 
 	// cursor coordinates
 	cx, cy int // cx is an index into Row.chars
 	rx     int // rx is an index into []rune(Row.render)
-
-	filetypeLookup func(string) *EditorSyntax
 
 	// Row offset is the number of rows above the row on the top of the screen
 	// Offset is calculated in the number of runes
@@ -68,30 +81,12 @@ type E struct {
 	screenRows int
 	screenCols int
 
-	// file content
-	rows []*Row
+	// General settings like tabstop
+	cfg DisplayConfig
 
 	// whether or not the file has been modified
 	modified bool
 
-	filename string
-
-	// status message and time the message was set
-	statusMsg string
-
-	// General settings like tabstop
-	cfg DisplayConfig
-
-	// specify which syntax highlight to use.
-	syntax *EditorSyntax
-
-	colorscheme map[SyntaxHL]int
-
-	keymap func(*E, ansi.Key) error
-
-	// Callbacks.
-	// Currently only has the open file callback
-	callbacks Callbacks
 }
 
 type Callbacks struct {
@@ -115,9 +110,8 @@ type Row struct {
 }
 
 type EditorConf struct {
-	Config    DisplayConfig
 	Keymap    func(*E, ansi.Key) error
-	Callbacks Callbacks
+	Config    DisplayConfig
 }
 
 func NewEditor(conf EditorConf, args []string) (err error) {

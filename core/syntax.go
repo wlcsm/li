@@ -23,12 +23,10 @@ const (
 )
 
 type EditorSyntax struct {
-	// Name of the filetype displayed in the status bar.
-	Filetype string
 	// List of keywords to highlight.
 	Keywords map[SyntaxHL][]string
-	// Second highlight group
-	Keywords2 []string
+	// Name of the filetype displayed in the status bar.
+	Filetype string
 	// scs is a single-line comment start pattern (e.g. "//" for golang).
 	// set to an empty string if comment highlighting is not needed.
 	Scs string

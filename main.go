@@ -22,7 +22,6 @@ func run() error {
 			Tabstop: 8,
 		},
 		Keymap:    config.ProcessKey,
-		Callbacks: core.Callbacks{},
 	}
 
 	return core.NewEditor(conf, os.Args)
